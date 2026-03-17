@@ -1,0 +1,80 @@
+[
+  {
+    "experiment": "spatial_e3_b4",
+    "model": "spatial",
+    "epochs": 3,
+    "batch_size": 4,
+    "max_real": 20,
+    "max_fake_per_csv": 8,
+    "loss": 0.5641786217689514,
+    "accuracy": 0.8823529411764706,
+    "precision": 0.8823529411764706,
+    "recall": 1.0,
+    "f1": 0.9375
+  },
+  {
+    "experiment": "frequency_e3_b4",
+    "model": "frequency",
+    "epochs": 3,
+    "batch_size": 4,
+    "max_real": 20,
+    "max_fake_per_csv": 8,
+    "loss": 0.3995818912982941,
+    "accuracy": 0.8823529411764706,
+    "precision": 0.8823529411764706,
+    "recall": 1.0,
+    "f1": 0.9375
+  },
+  {
+    "experiment": "spatial_e5_b4",
+    "model": "spatial",
+    "epochs": 5,
+    "batch_size": 4,
+    "max_real": 20,
+    "max_fake_per_csv": 8,
+    "loss": 0.5744328379631043,
+    "accuracy": 0.7647058823529411,
+    "precision": 0.7647058823529411,
+    "recall": 1.0,
+    "f1": 0.8666666666666666
+  },
+  {
+    "experiment": "frequency_e5_b4",
+    "model": "frequency",
+    "epochs": 5,
+    "batch_size": 4,
+    "max_real": 20,
+    "max_fake_per_csv": 8,
+    "loss": 0.5330072104930877,
+    "accuracy": 0.7647058823529411,
+    "precision": 0.7647058823529411,
+    "recall": 1.0,
+    "f1": 0.8666666666666666
+  },
+  {
+    "experiment": "spatial_balancedish",
+    "model": "spatial",
+    "epochs": 3,
+    "batch_size": 4,
+    "max_real": 20,
+    "max_fake_per_csv": 3,
+    "loss": 0.5993519028027853,
+    "accuracy": 0.6666666666666666,
+    "precision": 0.625,
+    "recall": 1.0,
+    "f1": 0.7692307692307693
+  },
+  {
+    "experiment": "frequency_balancedish",
+    "model": "frequency",
+    "epochs": 3,
+    "batch_size": 4,
+    "max_real": 20,
+    "max_fake_per_csv": 3,
+    "loss": 0.6979296803474426,
+    "accuracy": 0.4444444444444444,
+    "precision": 0.4444444444444444,
+    "recall": 1.0,
+    "f1": 0.6153846153846153
+  }
+]
