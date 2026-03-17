@@ -23,6 +23,9 @@ Due to access issues with the GenImage dataset, this milestone uses **FaceForens
 
 The pipeline reads video paths directly from the CSV metadata rather than manually restructuring the dataset.
 
+You will need to provide the dataset from https://www.kaggle.com/datasets/xdxd003/ff-c23?resource=download
+Github failed to upload the dataset
+
 ## Milestone Goals
 This milestone implements the proposal stages corresponding to:
 
