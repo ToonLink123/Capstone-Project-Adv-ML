@@ -1,0 +1,23 @@
+# Core scientific stack
+numpy>=1.24,<2.0
+pandas>=2.0
+matplotlib>=3.7
+Pillow>=10.0
+scikit-learn>=1.3
+
+# Deep learning
+torch>=2.0
+torchvision>=0.15
+
+# Computer vision / video
+opencv-python-headless>=4.8
+
+# Hugging Face dataset download
+huggingface_hub>=0.24
+
+# Optional: progress bars in scripts
+tqdm>=4.66
+
+# Notebook / Colab
+jupyter>=1.0
+ipykernel>=6.27

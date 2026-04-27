@@ -3,14 +3,12 @@ import json
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-
 from torch.utils.data import DataLoader, random_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 from video_dataset import FaceForensicsVideoDataset
 from model import SimpleCNN
 from fft import to_fft
-
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

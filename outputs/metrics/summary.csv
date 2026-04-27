@@ -1,0 +1,5 @@
+Model,Accuracy,Precision,Recall,F1,ROC-AUC,Loss
+Spatial CNN,0.904,0.9032,0.9049,0.904,0.9667,0.2346
+Frequency FFT-CNN,0.5006,0.5003,0.9956,0.6659,0.5006,0.6931
+Fusion (concat),0.7946,0.8288,0.7426,0.7833,0.8823,0.4416
+Attention Fusion,0.9435,0.9626,0.9228,0.9423,0.9879,0.1571

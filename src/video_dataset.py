@@ -8,6 +8,16 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
+def make_fft_image(image_tensor):
+    gray = image_tensor.mean(dim=0, keepdim=True)
+
+    fft = torch.fft.fft2(gray)
+    fft = torch.fft.fftshift(fft)
+
+    magnitude = torch.log(torch.abs(fft) + 1e-8)
+    magnitude = (magnitude - magnitude.min()) / (magnitude.max() - magnitude.min() + 1e-8)
+
+    return magnitude.float()
 
 class FaceForensicsVideoDataset(Dataset):
     def __init__(
@@ -117,7 +127,6 @@ class FaceForensicsVideoDataset(Dataset):
 
     def __getitem__(self, idx):
         video_path, label = self.samples[idx]
-
         try:
             frame = self._read_frame(video_path)
         except Exception:
@@ -127,6 +136,6 @@ class FaceForensicsVideoDataset(Dataset):
             if not ret or frame is None:
                 raise RuntimeError(f"Failed to load video entirely: {video_path}")
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        frame = self.transform(frame)
-        return frame, label
+        image = self.transform(frame)
+        fft_image = make_fft_image(image)
+        return image, fft_image, torch.tensor(label, dtype=torch.float32)

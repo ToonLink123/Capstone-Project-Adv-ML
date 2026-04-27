@@ -3,33 +3,38 @@ import json
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-
 from torch.utils.data import DataLoader, random_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 from video_dataset import FaceForensicsVideoDataset
 from model import SimpleCNN
+from fusion_model import FusionCNN
 from fft import to_fft
-
+from fusion_attention_model import AttentionFusionCNN
 
 DATASET_ROOT = r"D:\OpenCV\Capstone-Project-Adv-ML\data"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def train_one_epoch(model, loader, optimizer, criterion, use_fft=False):
+def train_one_epoch(model, loader, optimizer, criterion, model_name="spatial"):
     model.train()
     total_loss = 0.0
 
-    for x, y in loader:
-        x = x.to(DEVICE)
-        y = y.float().unsqueeze(1).to(DEVICE)
-
-        if use_fft:
-            x = to_fft(x)
+    for images, fft_images, labels in loader:
+        images = images.to(DEVICE)
+        fft_images = fft_images.to(DEVICE)
+        labels = labels.float().view(-1, 1).to(DEVICE)
 
         optimizer.zero_grad()
-        logits = model(x)
-        loss = criterion(logits, y)
+
+        if model_name in ["fusion", "attention_fusion"]:
+            logits = model(images, fft_images)
+        elif model_name == "frequency":
+            logits = model(to_fft(images))
+        else:
+            logits = model(images)
+
+        loss = criterion(logits, labels)
         loss.backward()
         optimizer.step()
 
@@ -39,36 +44,40 @@ def train_one_epoch(model, loader, optimizer, criterion, use_fft=False):
 
 
 @torch.no_grad()
-def evaluate(model, loader, criterion, use_fft=False):
+def evaluate(model, loader, criterion, model_name="spatial"):
     model.eval()
     total_loss = 0.0
     preds = []
-    labels = []
+    labels_all = []
 
-    for x, y in loader:
-        x = x.to(DEVICE)
-        y_tensor = y.float().unsqueeze(1).to(DEVICE)
+    for images, fft_images, labels in loader:
+        images = images.to(DEVICE)
+        fft_images = fft_images.to(DEVICE)
+        labels_tensor = labels.float().view(-1, 1).to(DEVICE)
 
-        if use_fft:
-            x = to_fft(x)
+        if model_name in ["fusion", "attention_fusion"]:
+            logits = model(images, fft_images)
+        elif model_name == "frequency":
+            logits = model(to_fft(images))
+        else:
+            logits = model(images)
 
-        logits = model(x)
-        loss = criterion(logits, y_tensor)
+        loss = criterion(logits, labels_tensor)
         total_loss += loss.item()
 
         probs = torch.sigmoid(logits)
         batch_preds = (probs > 0.5).int().cpu().numpy().flatten()
 
         preds.extend(batch_preds.tolist())
-        labels.extend(y.numpy().tolist())
+        labels_all.extend(labels.cpu().numpy().tolist())
 
     return {
         "loss": total_loss / len(loader),
-        "accuracy": accuracy_score(labels, preds),
-        "precision": precision_score(labels, preds, zero_division=0),
-        "recall": recall_score(labels, preds, zero_division=0),
-        "f1": f1_score(labels, preds, zero_division=0),
-        "confusion_matrix": confusion_matrix(labels, preds).tolist()
+        "accuracy": accuracy_score(labels_all, preds),
+        "precision": precision_score(labels_all, preds, zero_division=0),
+        "recall": recall_score(labels_all, preds, zero_division=0),
+        "f1": f1_score(labels_all, preds, zero_division=0),
+        "confusion_matrix": confusion_matrix(labels_all, preds).tolist()
     }
 
 
@@ -106,10 +115,15 @@ def run_experiment(model_name="spatial", epochs=5, batch_size=8):
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=0)
 
-    use_fft = model_name == "frequency"
-    in_channels = 1 if use_fft else 3
+    if model_name == "fusion":
+        model = FusionCNN().to(DEVICE)
+    elif model_name == "attention_fusion":
+        model = AttentionFusionCNN().to(DEVICE)
+    elif model_name == "frequency":
+        model = SimpleCNN(in_channels=1).to(DEVICE)
+    else:
+        model = SimpleCNN(in_channels=3).to(DEVICE)
 
-    model = SimpleCNN(in_channels=in_channels).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     criterion = nn.BCEWithLogitsLoss()
 
@@ -117,8 +131,8 @@ def run_experiment(model_name="spatial", epochs=5, batch_size=8):
     val_losses = []
 
     for epoch in range(epochs):
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, use_fft=use_fft)
-        val_metrics = evaluate(model, val_loader, criterion, use_fft=use_fft)
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, model_name=model_name)
+        val_metrics = evaluate(model, val_loader, criterion, model_name=model_name)
 
         train_losses.append(train_loss)
         val_losses.append(val_metrics["loss"])
@@ -138,7 +152,7 @@ def run_experiment(model_name="spatial", epochs=5, batch_size=8):
         f"{model_name.capitalize()} Loss"
     )
 
-    final_metrics = evaluate(model, val_loader, criterion, use_fft=use_fft)
+    final_metrics = evaluate(model, val_loader, criterion, model_name=model_name)
 
     with open(f"outputs/metrics/{model_name}_metrics.json", "w") as f:
         json.dump(final_metrics, f, indent=2)
@@ -149,6 +163,10 @@ def run_experiment(model_name="spatial", epochs=5, batch_size=8):
 if __name__ == "__main__":
     spatial = run_experiment("spatial", epochs=3, batch_size=4)
     frequency = run_experiment("frequency", epochs=3, batch_size=4)
+    fusion = run_experiment("fusion", epochs=3, batch_size=4)
+    attention_fusion = run_experiment("attention_fusion", epochs=5, batch_size=4)
 
     print("\nSpatial metrics:", spatial)
     print("Frequency metrics:", frequency)
+    print("Fusion metrics:", fusion)
+    print("Attention Fusion metrics:", attention_fusion)

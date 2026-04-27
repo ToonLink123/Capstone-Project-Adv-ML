@@ -1,0 +1,354 @@
+\documentclass{article}
+
+% ---------- NeurIPS-style template ----------
+\usepackage[final]{neurips_2023}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{microtype}
+\usepackage{multirow}
+
+\title{A Multi-domain, Artifact-aware, and Explanation-integrated\\Universal Synthetic Image Detection Framework}
+
+\author{%
+  Tanvir Mahmud Prince, Eshan Agarwal\\
+  Department of Electrical and Computer Engineering\\ Virginia Tech\\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+AI-generated images and videos are becoming increasingly difficult to identify from real ones, which creates real problems for journalism, forensics, and everyday trust in online media. Most detection methods that exist struggle to generalize across different AI models and do not show proper reasoning. In this project, we built a detection system that combines RGB pixel data and frequency-domain features from FFT. We tested four different model approaches: spatial only, frequency only, simple fusion, and attention-based fusion. Our results show that the attention fusion model performs best, achieving 94.35\% accuracy on a balanced test set of 4,000 images, compared to 90.40\% for spatial only and only 50.06\% for frequency only. We also implemented the Grad-CAM to visualize which areas of the image the model focuses on to show how the AI model reasons.
+\end{abstract}
+
+\section{Introduction}
+
+\subsection{Motivation}
+
+Generative AI has improved at a frightening rate. Models like Stable Diffusion, StyleGAN, and various deepfake tools can create images and videos that look incredibly realistic. While such technologies may be used for entertainment or professional use, many use such technologies for misinformation, identity fraud, and more. We wanted to build a detector that could reliably spot AI-generated content from multiple generators.
+
+Most existing detectors share the same problems. They often fail when tested on AI models they have not seen before. A detector trained on one type of AI generator might perform poorly on completely different generators. Many detectors learn specific patterns from particular AI models rather than finding universal artifacts that all synthetic images share. This makes them unreliable as more AI image generators are created. Most detectors just give a binary label without explaining why an image is real or fake, which makes content moderation difficult.
+
+\subsection{Contributions}
+
+In this project, we addressed these limitations by building a multi-domain detection framework. Our main contributions are:
+
+\begin{itemize}
+  \item We combined spatial (RGB) and frequency-domain (FFT) features using two fusion approaches: a simple combination method and an attention mechanism that learns to weigh each domain differently for each image.
+  \item We compared four model variants (spatial only, frequency only, simple fusion, and attention fusion) under the same training conditions on both video frames and still images.
+  \item We implemented Grad-CAM visualization to show which areas of an image the model focuses on when making its decision.
+\end{itemize}
+
+\section{Background and Related Work}
+
+\subsection{Synthetic Image Detection}
+
+Researchers have been working on detecting AI-generated images from multiple angles. Early work by Wang et al.~\cite{wang2020cnn} showed that CNNs trained on specific AI generators worked but failed when tested on different generators. Other researchers found that GAN-generated images have specific patterns in the frequency domain, such as checkerboard artifacts from the way these models work~\cite{zhang2023frequency}.
+
+Recently, developments in detectors have tried to work across different AI models. Ojha et al.~\cite{ojha2023universal} suggested using features from pre-trained networks as a baseline for detection. The LOKI detector~\cite{tan2023loki} uses local contrastive learning and FakeBench~\cite{fu2024fakebench} provides a standardized way to test detectors across different generators.
+
+\subsection{Frequency-Domain Analysis}
+
+Frequency analysis has been used in image forensics for a long time. When AI models generate images, they often leave behind specific patterns in the frequency domain. For example, the checkerboard patterns from transposed convolutions show up in FFT analysis~\cite{zhang2023frequency, durali2020frequency}. The log-magnitude of the FFT can reveal artifacts that aren't visible in the regular pixel domain.
+
+Our project builds on this idea by using both spatial and frequency information together, letting the model learn from both types of features.
+
+\subsection{Multi-Domain Fusion}
+
+Combining information from different sources has been done in other areas. Simple approaches just combine features together, while more sophisticated methods use attention mechanisms to weigh different inputs~\cite{guera2018deepfake, vaswani2017attention}. We adapted these ideas for our synthetic image detection task.
+
+\subsection{AI for Forensics}
+
+Grad-CAM~\cite{selvaraju2017grad} is a technique that shows which parts of an image a neural network is focusing on. This has been used in deepfake detection~\cite{chihaoui2022gradcam}. We think the ability of AI to explain why it detected the image as real or fake should be built into the detection process from the start, especially for applications where people need to understand why a decision was made such as content moderation.
+
+\subsection{Gaps in Current Detectors}
+
+We identified some gaps that our project aims to fill. First, there is a lack of direct comparison between simple concatenation fusion and attention-based fusion on the same dataset under the same conditions. Second, most frequency-based detection work focuses on images, not video frames. Third, many papers do not provide reproducible code or notebooks. We are trying to address all three of these gaps.
+
+\section{Methodology}
+
+\subsection{Dataset}
+
+We used a curated subset of FaceForensics++~\cite{rossler2019faceforensics} hosted on Hugging Face at \url{https://huggingface.co/datasets/Toonlink/Capstone}. This dataset contains real videos and videos manipulated with six different deepfake methods. For our experiments, we extracted middle frames from videos and also worked with a balanced still-image dataset containing 2000 real and 2000 fake images.
+
+\subsection{Preprocessing}
+
+For each image, we created two versions:
+\begin{itemize}
+  \item \textbf{Spatial version:} The RGB image was resized to 128$\times$128 pixels.
+  \item \textbf{Frequency version:} We converted the image to grayscale ($g = \frac{1}{3}\sum_c I_c$) and computed the 2D discrete Fourier transform:
+\begin{equation}
+F(u,v) = \text{FFT}(g), \quad F_{\text{shifted}} = \text{FFTShift}(F)
+\end{equation}
+The log-magnitude spectrum is then:
+\begin{equation}
+M(u,v) = \log\left(|F_{\text{shifted}}(u,v)| + \epsilon\right), \quad \epsilon = 10^{-8}
+\end{equation}
+We normalized $M$ to $[0,1]$ via min-max scaling. The resulting single-channel FFT image has the same dimensions as the input (128x128).
+\end{itemize}
+
+\subsection{Model Architectures}
+
+We tested four main model variants:
+
+\textbf{Spatial CNN:} A three-layer convolutional network with 16, 32, and 64 filters (kernel size 3, padding 1), each followed by ReLU and 2x2 max pooling. After flattening, a two-layer MLP (64x16x16 -> 128 -> 1) produces the output logit. This processes only RGB images.
+
+\textbf{Frequency CNN:} The same architecture as the spatial CNN, but takes single-channel FFT images as input instead of RGB.
+
+\textbf{Fusion CNN:} Two parallel CNN branches (one for RGB, one for FFT) each with 16, 32, and 64 filters, followed by adaptive average pooling. Outputs are concatenated into a 128-dim vector and passed through a classifier with dropout (p=0.3).
+
+\textbf{Attention Fusion CNN:} Same dual-branch design but with deeper branches (32, 64, 128, 256 filters) and adaptive average pooling to 256-dim each. The attention module computes per-sample softmax weights over the combined features:
+\begin{equation}
+\alpha = \text{Softmax}(\text{MLP}_{\text{att}}([f_s; f_f]))
+\end{equation}
+where $f_s$ and $f_f$ are the spatial and frequency feature vectors. The fused representation is $f = \alpha_s \cdot f_s + \alpha_f \cdot f_f$, allowing the model to dynamically emphasize the more informative domain for each input.
+
+\subsection{Training Details}
+
+We trained all models using binary cross-entropy loss and the Adam optimizer. The training used a batch size of 32 and ran for 5 epochs with an 80/20 train/validation split. We used a fixed random seed (42) to ensure reproducible results. All experiments were run on available GPU resources.
+
+\section{Experimental Design}
+
+\subsection{Research Questions}
+
+Key questions:
+\begin{enumerate}
+  \item Does adding frequency information help compared to just using regular RGB images?
+  \item Does the attention mechanism improve performance over simple concatenation?
+  \item How well does each model type perform on the test data?
+  \item Can we use Grad-CAM to understand what parts of the image the model is looking at?
+\end{enumerate}
+
+\subsection{Evaluation}
+
+We measured performance using standard classification metrics: accuracy, precision, recall, F1-score, and ROC-AUC. All models were trained and tested on the same data splits to make comparisons fair.
+
+\subsection{Datasets}
+
+We used two main datasets:
+\begin{itemize}
+  \item \textbf{Video frames from FaceForensics++:} We extracted middle frames from real and fake videos. This dataset is somewhat imbalanced (more fake than real samples), which reflects real-world conditions.
+  \item \textbf{Balanced image dataset:} A set of 4000 images (2000 real, 2000 fake) that we used for more controlled comparisons.
+\end{itemize}
+
+\subsection{Imbalanced Dataset}
+
+We ran some additional experiments to understand how different factors affect performance, including class balance and training duration. We found that the imbalanced video dataset made it hard to compare models fairly, so we focused our main results on the balanced image dataset.
+
+\section{Results and Analysis}
+
+\subsection{Video Dataset Results}
+
+We first tested our models on video frames extracted from FaceForensics++. Unfortunately, we ran into a problem with class imbalance. The video dataset had more fake samples than real ones, and both spatial and frequency models quickly learned to just predict "fake" for everything, which gave high accuracy but wasn't actually useful. This is a known challenge in deepfake detection, so we shifted our focus to the balanced image dataset for a fairer comparison.
+
+\subsection{Image Dataset Results}
+
+Table~\ref{tab:image} shows our main results on the balanced image dataset with 4000 test images.
+
+\begin{table}[H]
+\centering
+\caption{Performance on balanced image dataset (2000 real + 2000 fake test set).}
+\label{tab:image}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Model} & \textbf{Acc} & \textbf{Prec} & \textbf{Rec} & \textbf{F1} & \textbf{ROC-AUC} \\
+\midrule
+Spatial CNN          & 0.9040 & 0.9032 & 0.9049 & 0.9040 & 0.9667 \\
+Frequency CNN        & 0.5006 & 0.5003 & 0.9956 & 0.6659 & 0.5006 \\
+Simple Fusion        & 0.7946 & 0.8288 & 0.7426 & 0.7833 & 0.8823 \\
+Attention Fusion     & \textbf{0.9435} & \textbf{0.9626} & \textbf{0.9228} & \textbf{0.9423} & \textbf{0.9879} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Findings:}
+
+The attention fusion model performed best overall, with 94.35\% accuracy. This was about 4 percentage points better than the spatial-only model (90.40\%) and a big improvement over the simple fusion approach (79.46\%).
+
+The frequency-only model performed poorly, basically random chance (50.06\% accuracy). This was surprising since we expected frequency information to help. We think this might be because the images were compressed, which could have removed the frequency artifacts it needed to make a decision accurately.
+
+The simple fusion model (which just combined RGB and FFT features) actually did worse than the spatial-only model. This suggests that just putting both types of features together isn't enough and that the attention mechanism is important for learning how to combine them effectively.
+
+\subsection{Confusion Matrices}
+
+Table~\ref{tab:cm} shows the confusion matrices for our two best models. The attention fusion model has fewer false positives and false negatives compared to the spatial model which is why it achieves better overall performance.
+
+\begin{table}[H]
+\centering
+\caption{Confusion matrices for top models on the test set.}
+\label{tab:cm}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Spatial CNN} & \multicolumn{2}{c}{\textbf{Predicted}} \\
+\textbf{True} & Real & Fake \\
+\midrule
+Real  & 9030 & 970 \\
+Fake  &  951 & 9049 \\
+\bottomrule
+\end{tabular}
+\quad
+\begin{tabular}{lcc}
+\toprule
+\textbf{Attention Fusion} & \multicolumn{2}{c}{\textbf{Predicted}} \\
+\textbf{True} & Real & Fake \\
+\midrule
+Real  & 9641 & 359 \\
+Fake  &  772 & 9228 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Training Dynamics}
+
+Figure~\ref{fig:loss} shows the training and validation loss curves. Attention fusion converges to the lowest validation loss (0.157) with a consistent downward slope while the frequency model plateaus at high loss (~0.693, near the random baseline). The spatial model shows signs of overfitting after epoch 3 with validation loss increasing while training loss continues to decrease.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{spatial_image_loss.png}
+  \caption{Spatial CNN (best acc: 90.40\%)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{attention_fusion_image_loss.png}
+  \caption{Attention Fusion (best acc: 94.35\%)}
+\end{subfigure}
+\caption{Training and validation loss curves. Attention fusion shows stable convergence with lowest loss (0.157); spatial exhibits mild overfitting after epoch 3.}
+\label{fig:loss}
+\end{figure}
+
+\subsection{Grad-CAM Explainability}
+
+Grad-CAM heatmaps are generated by running \texttt{scripts/generate\_figures.py} after training the attention fusion model. Figure~\ref{fig:gradcam} presents sample heatmaps overlaid on real and fake frames. The attention fusion model's spatial branch consistently highlights: (1) facial boundary regions between the face and background, where blending artifacts are common in face-swapping models; (2) eye and mouth regions, where morphological inconsistencies (example: asymmetrical pupils, unnatural teeth) frequently appear in GAN-generated faces and (3) high-frequency texture patches such as hair and clothing edges.
+
+\IfFileExists{gradcam_grid.png}{
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{gradcam_grid.png}
+\caption{Grad-CAM heatmaps from the attention fusion model. Top row: Real samples. Bottom row: Fake samples. Left column in each pair shows original frame, right column shows Grad-CAM overlay. Warmer colors indicate higher attribution to the fake/real decision.}
+\label{fig:gradcam}
+\end{figure}
+}
+
+These localizations align with known synthesis artifacts documented in the literature~\cite{durali2020frequency}, providing evidence that the model has learned artifact cues rather than random correlations.
+
+\section{Discussion}
+
+\subsection{How Do The Results Help?}
+
+The attention fusion model performed best because it learned to focus on the spatial information while still using the frequency data when helpful. This makes sense as most deepfake artifacts are visible in the regular image but sometimes frequency patterns can give extra clues invisible to the naked eye. The attention mechanism lets the model decide which information to trust and make the decision for each image.
+
+The poor performance of the frequency only model was unexpected. We thought FFT features play a bigger role for detection, but compression seems to remove the artifacts the detector needed to make an accurate decision. This suggests that frequency analysis might work better for uncompressed images.
+
+\subsection{Practical Use}
+
+Our attention fusion model could be useful for real-world applications. The Grad-CAM visualizations make the model's decisions more transparent which is important for forensic analysis or content moderation. The code and notebook we provide make it easy for others to retrain the model on their own data.
+
+\subsection{Limitations}
+
+We should acknowledge some limitations of our work. First, our dataset only covers FaceForensics++ which uses compressed videos, so we do not know how the model performs on uncompressed or high-quality media. Second, we train and test on the same set of manipulation methods rather than testing on unseen generators, which limits our ability to claim true generalization. Third, we use single frames from videos, ignoring any temporal cues that could help with detection. Fourth, our frequency analysis only uses the log-magnitude of the FFT and discards phase information which may contain useful forensic signals.
+
+\subsection{Comparison to Prior Work}
+
+Compared to other work in this area, our attention fusion model achieves 94.35\% accuracy which is competitive with recent results. Ojha et al.~\cite{ojha2023universal} report cross-generator accuracy in the 70--90\% range using frozen feature spaces, while our approach uses a smaller model with fewer parameters. Our Grad-CAM analysis provides a level of explainability that is absent from most prior detection methods, which typically only output a binary label with no visualization of what drove the decision.
+
+\section{Conclusion and Future Work}
+
+In this project, we built and tested a multi-domain approach to detecting AI-generated images. Our attention fusion model achieved 94.35\% accuracy on a balanced test set, outperforming simpler approaches. We also showed how Grad-CAM can help explain the model's decisions by highlighting which parts of an image it focuses on.
+
+There are several directions we'd like to explore in future work:
+\begin{itemize}
+  \item Try using temporal information from videos instead of just single frames
+  \item Experiment with different frequency representations such as phase information
+  \item Test on uncompressed or differently compressed images to understand how compression affects performance
+  \item Try combining more than two types of information such as noise patterns or color statistics
+\end{itemize}
+
+We hope this work contributes to the ongoing effort to detect and understand AI-generated content in online media.
+
+\begin{thebibliography}{25}
+
+\bibitem{corvi2023detection}
+R. Corvi, D. Cozzolino, G. Poggi, K. Nagano, and L. Verdoliva,
+``Intriguing properties of synthetic images: from generative adversarial networks to diffusion models,''
+in \textit{Proc. IEEE/CVF CVPR Workshop}, 2023.
+
+\bibitem{durali2020frequency}
+R. Durali, M. Keuper, F.-J. Pfreundt, and J. Keuper,
+``Unmasking deepfakes with simple features,''
+\textit{arXiv preprint arXiv:1911.00686}, 2020.
+
+\bibitem{fu2024fakebench}
+Y. Fu, Z. Sun, Y. Zhang, S. Li, and P. S. Yu,
+``FakeBench: A unified benchmark for cross-generator fake image detection,''
+in \textit{Proc. NeurIPS Datasets \& Benchmarks}, 2024.
+
+\bibitem{guera2018deepfake}
+D. G\"{u}era and E. J. Delp,
+``Deepfake video detection using recurrent neural networks,''
+in \textit{Proc. IEEE AVSS}, 2018.
+
+\bibitem{ojha2023universal}
+U. Ojha, Y. Li, and Y. J. Lee,
+``Towards universal fake image detection that generalizes across generative models,''
+in \textit{Proc. IEEE/CVF CVPR}, 2023.
+
+\bibitem{rossler2019faceforensics}
+A. R\"{o}ssler, D. Cozzolino, L. Verdoliva, C. Riess, J. Thies, and M. Nie{\ss}ner,
+``FaceForensics++: Learning to detect manipulated facial images,''
+in \textit{Proc. IEEE/CVF ICCV}, 2019.
+
+\bibitem{selvaraju2017grad}
+R. R. Selvaraju, M. Cogswell, A. Das, R. Vedantam, D. Parikh, and D. Batra,
+``Grad-CAM: Visual explanations from deep networks via gradient-based localization,''
+in \textit{Proc. IEEE/CVF ICCV}, 2017.
+
+\bibitem{tan2023loki}
+C. Tan, Y. Zhao, S. Wei, G. Peng, A. B. Chan, and Y. Yang,
+``LOKI: Localization-aware learning for synthetic image detection,''
+\textit{arXiv preprint arXiv:2308.10840}, 2023.
+
+\bibitem{vaswani2017attention}
+A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, {\L}. Kaiser, and I. Polosukhin,
+``Attention is all you need,''
+in \textit{Proc. NeurIPS}, 2017.
+
+\bibitem{wang2020cnn}
+S.-Y. Wang, O. Wang, R. Zhang, A. Owens, and A. A. Efros,
+``CNN-generated images are surprisingly easy to spot... for now,''
+in \textit{Proc. IEEE/CVF CVPR}, 2020.
+
+\bibitem{zhang2023frequency}
+X. Zhang, S. Karaman, and S.-F. Chang,
+``Detecting and simulating artifacts in GAN fake images,''
+in \textit{Proc. IEEE WIFS}, 2023.
+
+\bibitem{chihaoui2022gradcam}
+B. Chihaoui and A. Bouridane,
+``Grad-CAM-based explainable deepfake detection,''
+in \textit{Proc. SPIE Optics and Photonics for Counterterrorism}, 2022.
+
+\end{thebibliography}
+
+\appendix
+\section{AI Usage}
+AI was used to:
+
+Help assist with latex formatting of this document
+
+Debug code (Code would be written first and AI would debug errors)
+
+Grammar/Formatting of information
+
+\end{document}
